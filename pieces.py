@@ -3,11 +3,13 @@ import sys
 import os
 import chess.pgn
 import chess
+import glob
 
 class Board(object):
     def __init__(self, rows):
         self.rows = rows
         self.w = len(rows[0])/3
+        self.orientation = ""
                 
         # Convert to greyscale
         greyboard = []
@@ -52,41 +54,15 @@ class Board(object):
                     for acol in range(x,x+squareWidth):
                         pixVals.append(self.g[arow][acol])
                 
-                self.squares.append(Square(numRows, numCols, squareWidth, list(pixVals)))
+                self.squares.append(Square(numRows, numCols, squareWidth, list(pixVals), self))
                 numSquares += 1
                 numCols += 1
                 y = y+squareWidth
             numRows += 1
             x = x+squareWidth
+            
+        self.orientation = self.squares[0].find_ori()
         
-        #print "number of squares"
-        #print numSquares
-        
-        #numwhites = 0
-        #numblacks = 0
-        #numtest = 64
-        #skip = 0
-        #for sq in self.squares:
-            
-        #    if skip > 0:
-        #        skip-= 1
-        #        continue
-            
-        #    sq.identify()
-            
-        #    if sq.piece == "none":
-        #        continue
-            
-        #    print sq
-                
-            #f = open('/Users/Lam/Documents/workspace/python play/out%d%d.png'%(sq.x+1,sq.y+1), 'wb')
-            #w = png.Writer(sq.w, sq.w, greyscale=True, bitdepth=8)
-            #w.write(f, list(sq.rows))
-            #f.close()
-            
-        #    numtest-=1
-        #    if numtest <= 0:
-        #        break
             
     def export_pgn(self, filename):
         new_pgn = open(filename, "w")
@@ -103,9 +79,11 @@ class Board(object):
         exporter = chess.pgn.FileExporter(new_pgn)
         game.export(exporter)
         
+        print "Created %s" % (filename)
+        
 
 class Square(object):
-    def __init__(self, x, y, w, pixels):
+    def __init__(self, x, y, w, pixels, parent):
         self.piece = "none"
         self.w = w
         self.pixels = pixels
@@ -115,6 +93,8 @@ class Square(object):
         self.av = 0
         self.pcode = 0
         self.ccode = 0
+        self.orientation = ""
+        self.parent = parent
         
         self.rows = []
         row = []
@@ -128,33 +108,47 @@ class Square(object):
                 count = 0
         
         self.identify()
+    
+    def find_ori(self):
+        if 10 > self.w:
+            return ""
+        
+        summ = 0
+        num = 0
+        for x in range(2,10):
+            for y in range(2,10):
+                summ += self.rows[y][x]
+                num += 1
+        av = summ / num
+        
+        if av < 170:
+            self.orientation = "1down"
+            return "1down"
+        else:
+            self.orientation = "1up"
+            return "1up"
+         
         
                 
     def coord(self):
-        ys = [7, 6, 5, 4, 3, 2, 1, 0]
-        return chess.SQUARES[self.x + ys[self.y] * 8]
+        if self.parent.orientation == "1up":
+            xs = [7, 6, 5, 4, 3, 2, 1, 0]
+            return chess.SQUARES[xs[self.x] + self.y * 8]
+        else:
+            ys = [7, 6, 5, 4, 3, 2, 1, 0]
+            return chess.SQUARES[self.x + ys[self.y] * 8]
+            
     
     def fpiece(self):
         return chess.Piece(self.pcode, self.ccode)
     
     def identify(self):
-        #print "--------------------------------"
         #print "Square ", self.x+1, self.y+1
         
         #average method
+        # not used anymore but can be useful maybe for other purposes
         av = sum(self.pixels)/len(self.pixels)
         self.av = av
-        #print "average is ", av
-        #if 150 < av and 162 > av:
-        #    self.color = "black"
-        #    self.piece = "none"
-        #    print self
-        #    return
-        #if 193 < av and 202 > av:
-        #    self.color = "white"
-        #    self.piece = "none"
-        #    print self
-        #    return
         
         
         myrow = self.pixels[self.w*self.w/2+5:self.w/2*self.w+self.w-5]
@@ -193,9 +187,12 @@ class Square(object):
                     self.piece = "pawn"
                     self.pcode = chess.PAWN
             elif num_wzons == 2:
-                if wz[0]-wz[1] > 10:
+                if wz[0]-wz[1] > 14:
                     self.piece = "bishop"
                     self.pcode = chess.BISHOP
+                elif wz[0]-wz[1] > 7:
+                    self.piece = "knight"
+                    self.pcode = chess.KNIGHT
                 else:
                     self.piece = "king"
                     self.pcode = chess.KING
@@ -237,9 +234,12 @@ class Square(object):
                     self.piece = "pawn"
                     self.pcode = chess.PAWN
             elif num_bzons == 2:
-                if bz[0]-bz[1] > 10:
+                if bz[0]-bz[1] > 14:
                     self.piece = "bishop"
                     self.pcode = chess.BISHOP
+                elif bz[0]-bz[1] > 7:
+                    self.piece = "knight"
+                    self.pcode = chess.KNIGHT
                 else:
                     self.piece = "king"
                     self.pcode = chess.KING
@@ -251,20 +251,8 @@ class Square(object):
         x=  "%d %d %s %s" % (self.x+1, self.y+1, str(self.color), str(self.piece))
         return x
             
-
-        
-if __name__ == '__main__':
-    
-    #print sys.argv
-    
-    if len(sys.argv) != 2:
-        print "usage : pieces.py filepath/filename.png"
-        sys.exit(0)
-    
-    filename = sys.argv[1]
-    if (os.path.isfile(filename)) == False:
-        print "%s is not a valid file" % (filename)
-        sys.exit(0)
+def process_one_file(filename):
+    print "Processing %s" % (filename)
     
     directory = os.path.dirname(filename)
     
@@ -291,7 +279,29 @@ if __name__ == '__main__':
     
     basename = os.path.splitext(filename)[0]
     myboard.export_pgn('%s.pgn' % (basename))
+        
+if __name__ == '__main__':
     
+    #print sys.argv
+    
+    if len(sys.argv) != 2:
+        print "usage : pieces.py filepath/filename.png"
+        sys.exit(0)
+    
+    filename = sys.argv[1]
+    if (os.path.isfile(filename)) == False and (os.path.isdir(filename)) == False:
+        print "%s is not a valid file" % (filename)
+        sys.exit(0)
+    
+    if (os.path.isfile(filename)) == True:
+        process_one_file(filename)
+    else: 
+        #directiory 
+        for file in os.listdir(filename):
+            if file.endswith(".png"):
+                process_one_file(os.path.join(filename,file))
+                
+                
     print "DONE"
         
     
