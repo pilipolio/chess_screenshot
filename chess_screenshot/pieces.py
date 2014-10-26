@@ -63,11 +63,8 @@ class Board(object):
             
         self.orientation = self.squares[0].find_ori()
         
-            
-    def export_pgn(self, filename):
-        new_pgn = open(filename, "w")
-        game = chess.pgn.Game()
-        
+    def to_pgn_game(self):
+        game = chess.pgn.Game()        
         bitboard = chess.Bitboard()
         
         for sq in self.squares:
@@ -75,12 +72,32 @@ class Board(object):
                 bitboard.set_piece_at(sq.coord(), sq.fpiece())
                 
         game.setup(bitboard)
+        return game
         
-        exporter = chess.pgn.FileExporter(new_pgn)
-        game.export(exporter)
+    def export_pgn(self, filename):
+        with open(filename, "w") as new_pgn:
+            game = self.to_pgn_game()
+            exporter = chess.pgn.FileExporter(new_pgn)
+            game.export(exporter)
         
         print "Created %s" % (filename)
+    
+    @classmethod
+    def from_filename(cls, filename):
+        r = png.Reader(filename)
+        x = r.read()
+        pixels = x[2]
         
+        # board is at 188th row and has a height of 480        
+        num = 0
+        board = []
+        for i in pixels:
+            if num >= 187 and num < 667:
+                board.append(i)
+            num = num + 1
+                
+        return cls(board)
+
 
 class Square(object):
     def __init__(self, x, y, w, pixels, parent):
@@ -246,37 +263,16 @@ class Square(object):
             else:
                 self.piece = "queen"
                 self.pcode = chess.QUEEN
-        
+    
     def __repr__(self):
         x=  "%d %d %s %s" % (self.x+1, self.y+1, str(self.color), str(self.piece))
         return x
             
 def process_one_file(filename):
     print "Processing %s" % (filename)
-    
+
+    myboard = Board.from_filename(filename)    
     directory = os.path.dirname(filename)
-    
-    r=png.Reader(filename)
-    x = r.read()
-       
-    pixels = x[2]
-    
-    # board is at 188th row and has a height of 480
-    
-    num = 0
-    board = []
-    for i in pixels:
-        if num >= 187 and num < 667:
-            board.append(i)
-        num = num + 1
-        
-    #f = open('%s/out.png' % (directory), 'wb')
-    #w = png.Writer(len(board[0])/3, len(board), greyscale=False, bitdepth=8)
-    #w.write(f, board)
-    #f.close()
-    
-    myboard = Board(board)
-    
     basename = os.path.splitext(filename)[0]
     myboard.export_pgn('%s.pgn' % (basename))
         
